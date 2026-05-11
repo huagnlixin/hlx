@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>郑和下西洋 - 海上丝绸之路的传奇旅程</title>
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    />
+    <style>
+        :root {
+            --bg-dark: #1a1a2e;
+            --panel-bg: rgba(22, 22, 40, 0.94);
+            --gold: #d4a853;
+            --gold-bright: #f0c860;
+            --gold-light: #fdf0d5;
+            --text: #e8e0d5;
+            --text-secondary: #b8b0a0;
+            --accent: #c8956c;
+            --ocean-dark: #1c3a5c;
+            --danger: #e05555;
+            --stage-active: #f0c860;
+            --stage-done: #8a7440;
+            --stage-future: #4a4a5a;
+            --font-heading: 'Georgia', 'Noto Serif SC', 'STSong', 'SimSun', 'KaiTi', serif;
+            --font-body: 'Georgia', 'Noto Serif SC', 'STKaiti', 'KaiTi', 'SimSun', serif;
+            --font-ui: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: #0d0d1a;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ========== 主地图容器 ========== */
+        #map-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #1a3050;
+        }
+
+        /* ========== 故事侧边面板 ========== */
+        #story-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 370px;
+            max-height: calc(100vh - 160px);
+            background: var(--panel-bg);
+            border: 1px solid rgba(180, 150, 100, 0.35);
+            border-radius: 14px;
+            z-index: 10;
+            padding: 24px 22px 20px;
+            color: var(--text);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(200, 160, 100, 0.08) inset;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1.2),
+                opacity 0.35s ease;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        #story-panel.collapsed {
+            transform: translateX(420px);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #story-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        #story-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #story-panel::-webkit-scrollbar-thumb {
+            background: rgba(180, 150, 100, 0.35);
+            border-radius: 2px;
+        }
+
+        #story-panel .stage-badge {
+            display: inline-block;
+            font-family: var(--font-ui);
+            font-size: 0.7rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--gold);
+            background: rgba(200, 150, 60, 0.12);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(200, 150, 60, 0.3);
+            margin-bottom: 10px;
+        }
+        #story-panel h2 {
+            font-family: var(--font-heading);
+            font-size: 1.55rem;
+            font-weight: 700;
+            color: var(--gold-bright);
+            margin: 0 0 6px;
+            letter-spacing: 0.03em;
+            line-height: 1.3;
+        }
+        #story-panel .subtitle {
+            font-family: var(--font-ui);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            letter-spacing: 0.04em;
+        }
+        #story-panel .story-text {
+            font-size: 0.92rem;
+            line-height: 1.7;
+            color: #d5cec0;
+            margin-bottom: 14px;
+            letter-spacing: 0.02em;
+        }
+        #story-panel .highlight-data {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        #story-panel .data-chip {
+            background: rgba(200, 160, 90, 0.1);
+            border: 1px solid rgba(200, 150, 60, 0.25);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-family: var(--font-ui);
+            font-size: 0.75rem;
+            color: var(--gold-light);
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+        }
+        #story-panel .data-chip strong {
+            font-size: 1.1rem;
+            color: var(--gold-bright);
+            display: block;
+            font-family: var(--font-heading);
+        }
+
+        /* ========== 底部阶段导航条 ========== */
+        #stage-nav {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 6px;
+            background: var(--panel-bg);
+            border-radius: 40px;
+            padding: 6px 10px;
+            border: 1px solid rgba(180, 150, 100, 0.3);
+            box-shadow: 0 6px 28px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        #stage-nav .nav-dot {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid var(--stage-future);
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-ui);
+            font-size: 0.7rem;
+            color: #888;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        #stage-nav .nav-dot:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+            box-shadow: 0 0 14px rgba(200, 150, 60, 0.3);
+            transform: scale(1.1);
+        }
+        #stage-nav .nav-dot.active {
+            border-color: var(--stage-active);
+            background: rgba(240, 200, 96, 0.15);
+            color: var(--stage-active);
+            box-shadow: 0 0 20px rgba(240, 200, 96, 0.4);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        #stage-nav .nav-dot.done {
+            border-color: var(--stage-done);
+            background: rgba(138, 116, 64, 0.25);
+            color: #c8b878;
+        }
+        @keyframes pulse-dot {
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(240, 200, 96, 0.35);
+            }
+            50% {
+                box-shadow: 0 0 35px rgba(240, 200, 96, 0.7);
+            }
+        }
+        #stage-nav .nav-arrow {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(180, 150, 100, 0.4);
+            background: rgba(200, 150, 60, 0.1);
+            cursor: pointer;
+            color: var(--gold);
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        #stage-nav .nav-arrow:hover {
+            background: rgba(200, 150, 60, 0.3);
+            border-color: var(--gold-bright);
+            box-shadow: 0 0 16px rgba(200, 150, 60, 0.4);
+        }
+
+        /* ========== 面板折叠按钮 ========== */
+        #toggle-panel {
+            position: absolute;
+            top: 28px;
+            right: 400px;
+            z-index: 11;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: var(--panel-bg);
+            border: 1.5px solid rgba(180, 150, 100, 0.4);
+            color: var(--gold);
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.35s ease;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+        #toggle-panel.shifted {
+            right: 28px;
+        }
+        #toggle-panel:hover {
+            border-color: var(--gold-bright);
+            box-shadow: 0 0 18px rgba(200, 150, 60, 0.5);
+        }
+
+        /* ========== 图层切换面板 ========== */
+        #layer-control {
+            position: absolute;
+            bottom: 120px;
+            left: 20px;
+            z-index: 10;
+            background: var(--panel-bg);
+            border-radius: 10px;
+            padding: 10px 14px;
+            border: 1px solid rgba(180, 150, 100, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            font-family: var(--font-ui);
+            font-size: 0.73rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.03em;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        #layer-control label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            padding: 3px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        #layer-control label:hover {
+            background: rgba(200, 150, 60, 0.1);
+        }
+        #layer-control input[type="radio"],
+        #layer-control input[type="checkbox"] {
+            accent-color: var(--gold);
+            cursor: pointer;
+        }
+        #layer-control .layer-section-title {
+            font-size: 0.7rem;
+            color: var(--gold);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-top: 2px;
+            padding-bottom: 2px;
+            border-bottom: 1px solid rgba(180, 150, 100, 0.2);
+        }
+
+        /* ========== 自定义标记弹出框 ========== */
+        .leaflet-popup-content-wrapper {
+            background: rgba(22, 22, 40, 0.95) !important;
+            border: 1px solid rgba(180, 150, 100, 0.5) !important;
+            border-radius: 10px !important;
+            color: var(--text) !important;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
+            font-family: var(--font-body) !important;
+            backdrop-filter: blur(10px);
+        }
+        .leaflet-popup-tip {
+            background: rgba(22, 22, 40, 0.95) !important;
+        }
+        .leaflet-popup-content {
+            margin: 10px 14px !important;
+            font-size: 0.85rem !important;
+            line-height: 1.6 !important;
+        }
+        .leaflet-popup-content strong {
+            color: var(--gold-bright);
+            font-family: var(--font-heading);
+            font-size: 1rem;
+        }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 768px) {
+            #story-panel {
+                width: 280px;
+                right: 8px;
+                top: 8px;
+                max-height: calc(100vh - 180px);
+                padding: 16px 14px;
+                border-radius: 10px;
+            }
+            #story-panel h2 {
+                font-size: 1.2rem;
+            }
+            #story-panel .story-text {
+                font-size: 0.8rem;
+            }
+            #toggle-panel {
+                right: 300px;
+                top: 14px;
+                width: 28px;
+                height: 28px;
+                font-size: 0.8rem;
+            }
+            #toggle-panel.shifted {
+                right: 14px;
+            }
+            #stage-nav {
+                bottom: 10px;
+                gap: 3px;
+                padding: 4px 8px;
+                border-radius: 30px;
+            }
+            #stage-nav .nav-dot {
+                width: 28px;
+                height: 28px;
+                font-size: 0.6rem;
+            }
+            #stage-nav .nav-arrow {
+                width: 24px;
+                height: 24px;
+                font-size: 0.8rem;
+            }
+            #layer-control {
+                bottom: 100px;
+                left: 6px;
+                padding: 6px 10px;
+                font-size: 0.65rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 地图容器 -->
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+
+    <!-- 折叠面板按钮 -->
+    <button id="toggle-panel" title="折叠/展开故事面板">◀</button>
+
+    <!-- 故事侧边面板 -->
+    <div id="story-panel">
+        <span class="stage-badge" id="stage-badge">开端</span>
+        <h2 id="stage-title">南京·龙江关</h2>
+        <div class="subtitle" id="stage-subtitle">大明永乐三年 · 公元1405年</div>
+        <div class="story-text" id="stage-text">
+            明成祖朱棣命三宝太监郑和为正使，率领庞大船队从南京龙江关起航。船队拥有超过200艘船只，包括数十艘巨型"宝船"，船员达27,800余人。这是人类航海史上空前壮举的开端。
+        </div>
+        <div class="highlight-data" id="stage-data">
+            <div class="data-chip"><strong>200+</strong>艘船只</div>
+            <div class="data-chip"><strong>27,800</strong>名船员</div>
+            <div class="data-chip"><strong>1405年</strong>首次出航</div>
+        </div>
+    </div>
+
+    <!-- 底部阶段导航 -->
+    <div id="stage-nav">
+        <button class="nav-arrow" id="btn-prev" title="上一阶段">◀</button>
+        <button class="nav-dot active" data-stage="0" title="开端·南京">1</button>
+        <button class="nav-dot" data-stage="1" title="占城">2</button>
+        <button class="nav-dot" data-stage="2" title="满剌加">3</button>
+        <button class="nav-dot" data-stage="3" title="古里·印度">4</button>
+        <button class="nav-dot" data-stage="4" title="木骨都束·非洲">5</button>
+        <button class="nav-dot" data-stage="5" title="归航">6</button>
+        <button class="nav-arrow" id="btn-next" title="下一阶段">▶</button>
+    </div>
+
+    <!-- 图层切换面板 -->
+    <div id="layer-control">
+        <div class="layer-section-title">🗺️ 底图风格</div>
+        <label><input type="radio" name="basemap" value="modern" checked> 现代地图</label>
+        <label><input type="radio" name="basemap" value="dark"> 深色航海图</label>
+        <label><input type="radio" name="basemap" value="satellite"> 卫星影像</label>
+        <div class="layer-section-title">📐 覆盖图层</div>
+        <label><input type="checkbox" id="layer-routes" checked> 郑和航线</label>
+        <label><input type="checkbox" id="layer-markers" checked> 停靠站点</label>
+        <label><input type="checkbox" id="layer-trade"> 贸易网络示意</label>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+    >
+</script>
+
+<script>
+    (function() {
+        // ==================== 数据定义 ====================
+        // 郑和下西洋各阶段数据
+        const stages = [{
+            id: 0,
+            name: '开端',
+            title: '南京·龙江关 — 扬帆起航',
+            subtitle: '大明永乐三年 · 公元1405年',
+            text: '明成祖朱棣命三宝太监郑和为正使，率领当时世界上最庞大的船队从南京龙江关起航。船队拥有超过200艘船只，数十艘巨型"宝船"长达44丈（约137米），宽18丈，九桅十二帆，规模之宏大令世界震惊。船员达27,800余人，包括水手、士兵、翻译、医官、天文学家等。这是人类航海史上空前壮举的开端，也是中国海洋探索的巅峰时刻。',
+            data: [
+                { label: '船只', value: '200+' },
+                { label: '船员', value: '27,800' },
+                { label: '宝船长度', value: '~137米' },
+            ],
+            center: [32.06, 118.79],
+            zoom: 10,
+            markerLatLng: [32.06, 118.79],
+            markerLabel: '南京·龙江关',
+            pathCoords: null, // 起点，暂无路径
+        }, {
+            id: 1,
+            name: '发展',
+            title: '占城 · 第一站 — 南海明珠',
+            subtitle: '大明永乐三年冬 · 公元1405年末',
+            text: '船队沿东南沿海南下，首站抵达占城国（今越南中南部）。占城国王亲自率众迎接，献上珍贵香料、象牙和珍珠。郑和以大明皇帝的名义赐予丝绸、瓷器作为回礼。这里的友好接待为后续航行奠定了良好基础，也让船员们首次体验了异域风情。船队在占城补充淡水与粮食后继续向南航行。',
+            data: [
+                { label: '航行距离', value: '~2,400里' },
+                { label: '停留', value: '约15日' },
+                { label: '贸易品', value: '香料·象牙' },
+            ],
+            center: [13.77, 109.23],
+            zoom: 11,
+            markerLatLng: [13.77, 109.23],
+            markerLabel: '占城·归仁',
+            pathCoords: [
+                [32.06, 118.79],
+                [30.2, 121.5],
+                [25.0, 119.5],
+                [20.5, 115.0],
+                [16.5, 111.5],
+                [13.77, 109.23]
+            ],
+        }, {
+            id: 2,
+            name: '发展',
+            title: '满剌加 · 贸易枢纽 — 海峡咽喉',
+            subtitle: '大明永乐四年 · 公元1406年',
+            text: '船队穿越南海，抵达满剌加（今马六甲）。郑和敏锐地认识到此地战略位置的重要性——它是连接南海与印度洋的咽喉要道。郑和在此建立了规模庞大的贸易基地和物资中转站，修筑仓库、城墙，并派驻士兵守卫。满剌加从此成为郑和七下西洋最重要的海外基地，也是东西方贸易的黄金枢纽。',
+            data: [
+                { label: '累计航程', value: '~5,000里' },
+                { label: '基地规模', value: '大型中转站' },
+                { label: '战略意义', value: '海峡咽喉' },
+            ],
+            center: [2.19, 102.25],
+            zoom: 12,
+            markerLatLng: [2.19, 102.25],
+            markerLabel: '满剌加·马六甲',
+            pathCoords: [
+                [13.77, 109.23],
+                [10.5, 107.5],
+                [6.5, 105.5],
+                [3.5, 103.5],
+                [2.19, 102.25]
+            ],
+        }, {
+            id: 3,
+            name: '高潮',
+            title: '古里 · 印度洋门户 — 横渡大洋',
+            subtitle: '大明永乐五年 · 公元1407年',
+            text: '船队穿越孟加拉湾，抵达印度西海岸的古里（今卡利卡特）。这里是当时印度洋最重要的贸易中心之一，来自阿拉伯、波斯、非洲的商船云集于此。郑和在此进行了规模空前的贸易活动，用中国丝绸、瓷器换取了大量胡椒、宝石和药材。古里成为郑和进入印度洋深处的重要跳板，从这里向西，便是未知的非洲海岸。',
+            data: [
+                { label: '累计航程', value: '~8,000里' },
+                { label: '贸易额', value: '巨额' },
+                { label: '下一目标', value: '非洲东海岸' },
+            ],
+            center: [11.25, 75.77],
+            zoom: 11,
+            markerLatLng: [11.25, 75.77],
+            markerLabel: '古里·卡利卡特',
+            pathCoords: [
+                [2.19, 102.25],
+                [5.5, 97.0],
+                [8.0, 88.0],
+                [10.5, 80.0],
+                [11.25, 75.77]
+            ],
+        }, {
+            id: 4,
+            name: '高潮',
+            title: '木骨都束 · 非洲之角 — 最远的抵达',
+            subtitle: '大明永乐十三年 · 公元1415年（第四次航行）',
+            text: '这是郑和船队最辉煌的时刻——横渡整个印度洋，抵达非洲东海岸的木骨都束（今索马里摩加迪沙）！庞大的中国船队出现在非洲海岸，令当地居民惊叹不已。郑和在此拜访了当地首领，互赠礼物，并将非洲的长颈鹿（当时中国人称之为"麒麟"）带回中国，引起朝野轰动。这是中国航海史上最远的抵达点，也是人类跨洋交流的伟大里程碑。',
+            data: [
+                { label: '累计航程', value: '~15,000里' },
+                { label: '最远到达', value: '非洲东海岸' },
+                { label: '带回', value: '麒麟(长颈鹿)' },
+            ],
+            center: [2.04, 45.34],
+            zoom: 11,
+            markerLatLng: [2.04, 45.34],
+            markerLabel: '木骨都束·摩加迪沙',
+            pathCoords: [
+                [11.25, 75.77],
+                [10.0, 68.0],
+                [7.0, 58.0],
+                [4.0, 50.0],
+                [2.04, 45.34]
+            ],
+        }, {
+            id: 5,
+            name: '结尾',
+            title: '归航 · 历史的回响 — 七下西洋的遗产',
+            subtitle: '大明宣德八年 · 公元1433年',
+            text: '从1405年到1433年，郑和前后七次率领船队远航，访问了30多个国家和地区，最远到达非洲东海岸。1433年，郑和在第七次航行归途中病逝，葬于南京。他的航海壮举比哥伦布发现美洲早87年，比达·伽马到达印度早93年。然而大明随后实行海禁，这支伟大船队的传奇逐渐被尘封。但郑和的故事永远是人类探索精神的不朽象征。',
+            data: [
+                { label: '总航次', value: '7次' },
+                { label: '访问国家', value: '30+' },
+                { label: '历时', value: '28年' },
+            ],
+            center: [32.06, 118.79],
+            zoom: 10,
+            markerLatLng: [32.06, 118.79],
+            markerLabel: '南京·归航',
+            pathCoords: [
+                [2.04, 45.34],
+                [5.0, 52.0],
+                [8.0, 62.0],
+                [11.25, 75.77],
+                [8.0, 88.0],
+                [2.19, 102.25],
+                [13.77, 109.23],
+                [25.0, 119.5],
+                [32.06, 118.79]
+            ],
+        }];
+
+        // 贸易网络示意数据（额外的覆盖图层）
+        const tradeLines = [
+            { coords: [
+                    [32.06, 118.79],
+                    [13.77, 109.23]
+                ], label: '丝绸·瓷器→' },
+            { coords: [
+                    [13.77, 109.23],
+                    [2.19, 102.25]
+                ], label: '香料→' },
+            { coords: [
+                    [2.19, 102.25],
+                    [11.25, 75.77]
+                ], label: '胡椒·宝石→' },
+            { coords: [
+                    [11.25, 75.77],
+                    [2.04, 45.34]
+                ], label: '象牙·药材→' },
+        ];
+
+        // ==================== 地图初始化 ====================
+        const map = L.map('map', {
+            center: [18, 85],
+            zoom: 4.5,
+            zoomControl: true,
+            fadeAnimation: true,
+            zoomAnimation: true,
+            attributionControl: true,
+        });
+
+        // 底图图层
+        const baseMaps = {
+            modern: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                maxZoom: 19,
+            }),
+            dark: L.tileLayer(
+                'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+                    maxZoom: 19,
+                    subdomains: 'abcd',
+                }),
+            satellite: L.tileLayer(
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: '&copy; Esri & contributors',
+                    maxZoom: 18,
+                }),
+        };
+
+        // 默认底图
+        baseMaps.modern.addTo(map);
+
+        // 覆盖图层组
+        const routeLayerGroup = L.layerGroup().addTo(map);
+        const markerLayerGroup = L.layerGroup().addTo(map);
+        const tradeLayerGroup = L.layerGroup(); // 默认不显示
+
+        // 全部航线（一次性绘制所有阶段路径的汇总）
+        const allRouteCoords = [];
+        stages.forEach(s => {
+            if (s.pathCoords) {
+                allRouteCoords.push(...s.pathCoords);
+            }
+        });
+        // 去重连续点
+        const uniqueCoords = [];
+        allRouteCoords.forEach(c => {
+            if (uniqueCoords.length === 0 ||
+                uniqueCoords[uniqueCoords.length - 1][0] !== c[0] ||
+                uniqueCoords[uniqueCoords.length - 1][1] !== c[1]) {
+                uniqueCoords.push(c);
+            }
+        });
+
+        const fullRouteLine = L.polyline(uniqueCoords, {
+            color: '#d4a853',
+            weight: 3.5,
+            opacity: 0.7,
+            dashArray: '10, 6',
+            lineCap: 'round',
+            lineJoin: 'round',
+        });
+        routeLayerGroup.addLayer(fullRouteLine);
+
+        // 当前阶段高亮路径
+        let currentHighlightPath = null;
+
+        // 所有标记
+        const allMarkers = [];
+        stages.forEach((s, idx) => {
+            const markerIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="
+                        width:${idx === 0 || idx === 5 ? '30px' : '26px'}; 
+                        height:${idx === 0 || idx === 5 ? '30px' : '26px'}; 
+                        background:${idx === 4 ? '#e05555' : '#d4a853'}; 
+                        border:3px solid #fff; 
+                        border-radius:50%; 
+                        box-shadow:0 0 14px rgba(0,0,0,0.5), 0 0 8px ${idx === 4 ? '#e05555' : '#d4a853'};
+                        cursor:pointer;
+                        transition:transform 0.3s;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        font-size:${idx === 0 || idx === 5 ? '14px' : '11px'};
+                        color:#1a1a2e;
+                        font-weight:bold;
+                    " onmouseover="this.style.transform='scale(1.35)'" onmouseout="this.style.transform='scale(1)'">
+                        ${idx === 0 ? '起' : idx === 4 ? '★' : idx === 5 ? '归' : idx}
+                    </div>`,
+                iconSize: [idx === 0 || idx === 5 ? 30 : 26, idx === 0 || idx === 5 ? 30 : 26],
+                iconAnchor: [idx === 0 || idx === 5 ? 15 : 13, idx === 0 || idx === 5 ? 15 : 13],
+                popupAnchor: [0, -(idx === 0 || idx === 5 ? 16 : 14)],
+            });
+
+            const marker = L.marker(s.markerLatLng, { icon: markerIcon })
+                .bindPopup(
+                    `<strong>${s.markerLabel}</strong><br><span style="font-size:0.78rem;color:#b8b0a0;">${s.subtitle}</span><br><span style="font-size:0.8rem;">${s.text.substring(0, 80)}...</span>`
+                );
+            markerLayerGroup.addLayer(marker);
+            allMarkers.push(marker);
+        });
+
+        // 贸易网络图层
+        tradeLines.forEach(tl => {
+            const line = L.polyline(tl.coords, {
+                color: '#c8956c',
+                weight: 2,
+                opacity: 0.55,
+                dashArray: '6, 12',
+                lineCap: 'round',
+            });
+            const midIdx = Math.floor(tl.coords.length / 2);
+            const midPt = tl.coords[midIdx];
+            const labelIcon = L.divIcon({
+                className: 'trade-label',
+                html: `<span style="
+                        font-size:0.65rem;
+                        color:#c8956c;
+                        background:rgba(22,22,40,0.8);
+                        padding:1px 6px;
+                        border-radius:3px;
+                        white-space:nowrap;
+                        letter-spacing:0.03em;
+                    ">${tl.label}</span>`,
+                iconSize: [60, 16],
+                iconAnchor: [30, 8],
+            });
+            const labelMarker = L.marker(midPt, { icon: labelIcon, interactive: false });
+            tradeLayerGroup.addLayer(line);
+            tradeLayerGroup.addLayer(labelMarker);
+        });
+
+        // ==================== 当前状态 ====================
+        let currentStageIndex = 0;
+        let panelCollapsed = false;
+
+        // ==================== 更新故事面板 ====================
+        function updateStoryPanel(stageIndex) {
+            const s = stages[stageIndex];
+            document.getElementById('stage-badge').textContent = s.name;
+            document.getElementById('stage-title').textContent = s.title;
+            document.getElementById('stage-subtitle').textContent = s.subtitle;
+            document.getElementById('stage-text').textContent = s.text;
+            const dataContainer = document.getElementById('stage-data');
+            dataContainer.innerHTML = s.data.map(d =>
+                `<div class="data-chip"><strong>${d.value}</strong>${d.label}</div>`
+            ).join('');
+            // 滚动面板到顶部
+            const panel = document.getElementById('story-panel');
+            if (panel) panel.scrollTop = 0;
+        }
+
+        // ==================== 更新导航点状态 ====================
+        function updateNavDots(stageIndex) {
+            const dots = document.querySelectorAll('#stage-nav .nav-dot');
+            dots.forEach((dot, i) => {
+                dot.classList.remove('active', 'done');
+                if (i === stageIndex) {
+                    dot.classList.add('active');
+                } else if (i < stageIndex) {
+                    dot.classList.add('done');
+                }
+            });
+        }
+
+        // ==================== 飞行到阶段 ====================
+        function flyToStage(stageIndex, duration = 1.8) {
+            const s = stages[stageIndex];
+            map.flyTo(s.center, s.zoom, {
+                duration: duration,
+                easeLinearity: 0.25,
+            });
+
+            // 更新高亮路径
+            if (currentHighlightPath) {
+                routeLayerGroup.removeLayer(currentHighlightPath);
+                currentHighlightPath = null;
+            }
+            if (s.pathCoords && s.pathCoords.length >= 2) {
+                currentHighlightPath = L.polyline(s.pathCoords, {
+                    color: '#f0c860',
+                    weight: 5,
+                    opacity: 0.9,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                    className: 'animated-path',
+                });
+                routeLayerGroup.addLayer(currentHighlightPath);
+                // 闪烁动画
+                const el = currentHighlightPath.getElement();
+                if (el) {
+                    el.style.animation = 'none';
+                    el.offsetHeight;
+                    el.style.animation = 'path-glow 1.5s ease-in-out 3';
+                }
+            }
+
+            updateStoryPanel(stageIndex);
+            updateNavDots(stageIndex);
+            currentStageIndex = stageIndex;
+
+            // 打开对应标记的弹出框
+            setTimeout(() => {
+                if (allMarkers[stageIndex]) {
+                    allMarkers[stageIndex].openPopup();
+                }
+            }, duration * 1000 + 300);
+        }
+
+        // ==================== 事件监听 ====================
+        // 导航点点击
+        document.querySelectorAll('#stage-nav .nav-dot').forEach(dot => {
+            dot.addEventListener('click', function() {
+                const stageIndex = parseInt(this.getAttribute('data-stage'));
+                if (!isNaN(stageIndex) && stageIndex !== currentStageIndex) {
+                    flyToStage(stageIndex);
+                }
+            });
+        });
+
+        // 上一阶段/下一阶段按钮
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if (currentStageIndex > 0) {
+                flyToStage(currentStageIndex - 1);
+            }
+        });
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if (currentStageIndex < stages.length - 1) {
+                flyToStage(currentStageIndex + 1);
+            }
+        });
+
+        // 面板折叠按钮
+        const togglePanelBtn = document.getElementById('toggle-panel');
+        const storyPanel = document.getElementById('story-panel');
+        togglePanelBtn.addEventListener('click', () => {
+            panelCollapsed = !panelCollapsed;
+            if (panelCollapsed) {
+                storyPanel.classList.add('collapsed');
+                togglePanelBtn.classList.add('shifted');
+                togglePanelBtn.textContent = '▶';
+            } else {
+                storyPanel.classList.remove('collapsed');
+                togglePanelBtn.classList.remove('shifted');
+                togglePanelBtn.textContent = '◀';
+            }
+        });
+
+        // 底图切换
+        document.querySelectorAll('input[name="basemap"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const val = this.value;
+                // 移除所有底图
+                Object.values(baseMaps).forEach(layer => {
+                    if (map.hasLayer(layer)) map.removeLayer(layer);
+                });
+                // 添加选中的底图
+                if (baseMaps[val]) {
+                    baseMaps[val].addTo(map);
+                    // 确保底图在所有覆盖层之下
+                    baseMaps[val].setZIndex(0);
+                }
+            });
+        });
+
+        // 覆盖图层切换 - 航线
+        document.getElementById('layer-routes').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(routeLayerGroup);
+            } else {
+                map.removeLayer(routeLayerGroup);
+            }
+        });
+
+        // 覆盖图层切换 - 标记
+        document.getElementById('layer-markers').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(markerLayerGroup);
+            } else {
+                map.removeLayer(markerLayerGroup);
+            }
+        });
+
+        // 覆盖图层切换 - 贸易网络
+        document.getElementById('layer-trade').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(tradeLayerGroup);
+            } else {
+                map.removeLayer(tradeLayerGroup);
+            }
+        });
+
+        // 键盘导航
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (currentStageIndex < stages.length - 1) {
+                    flyToStage(currentStageIndex + 1);
+                }
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (currentStageIndex > 0) {
+                    flyToStage(currentStageIndex - 1);
+                }
+            } else if (e.key === 'f' || e.key === 'F') {
+                // 按F键飞到当前阶段
+                flyToStage(currentStageIndex, 1.2);
+            }
+        });
+
+        // 标记点击时同步更新面板
+        allMarkers.forEach((marker, idx) => {
+            marker.on('click', function() {
+                if (idx !== currentStageIndex) {
+                    flyToStage(idx, 1.5);
+                }
+            });
+        });
+
+        // ==================== 初始加载 ====================
+        // 初始显示阶段0
+        updateStoryPanel(0);
+        updateNavDots(0);
+        // 初始高亮路径
+        if (stages[0].pathCoords === null) {
+            // 阶段0没有路径，显示一个小范围标记
+        }
+        // 打开初始标记弹出框
+        setTimeout(() => {
+            if (allMarkers[0]) allMarkers[0].openPopup();
+        }, 600);
+
+        // ==================== 添加路径发光动画样式 ====================
+        const styleEl = document.createElement('style');
+        styleEl.textContent = `
+                @keyframes path-glow {
+                    0%, 100% { filter: drop-shadow(0 0 4px rgba(240,200,96,0.6)); }
+                    50% { filter: drop-shadow(0 0 14px rgba(240,200,96,1)); }
+                }
+                .animated-path {
+                    animation: path-glow 1.5s ease-in-out 3;
+                }
+                .leaflet-control-zoom a {
+                    background: rgba(22,22,40,0.85) !important;
+                    color: #d4a853 !important;
+                    border: 1px solid rgba(180,150,100,0.4) !important;
+                    border-radius: 6px !important;
+                }
+                .leaflet-control-zoom a:hover {
+                    background: rgba(40,40,60,0.9) !important;
+                    color: #f0c860 !important;
+                }
+                .leaflet-control-attribution {
+                    background: rgba(22,22,40,0.7) !important;
+                    color: #888 !important;
+                    font-size: 0.65rem !important;
+                    padding: 2px 8px !important;
+                    border-radius: 3px !important;
+                }
+                .leaflet-control-attribution a {
+                    color: #b8a070 !important;
+                }
+            `;
+        document.head.appendChild(styleEl);
+
+        // ==================== 响应式调整 ====================
+        function handleResize() {
+            const width = window.innerWidth;
+            if (width < 600 && !panelCollapsed) {
+                // 小屏幕自动折叠面板
+                panelCollapsed = true;
+                storyPanel.classList.add('collapsed');
+                togglePanelBtn.classList.add('shifted');
+                togglePanelBtn.textContent = '▶';
+            }
+        }
+        window.addEventListener('resize', handleResize);
+        handleResize();
+
+        console.log('🚢 郑和下西洋 · 交互式故事地图已就绪');
+        console.log('   📍 共 ' + stages.length + ' 个叙事阶段');
+        console.log('   🗺️ 使用底部导航点或键盘方向键浏览');
+        console.log('   🖱️ 点击地图标记也可跳转阶段');
+        console.log('   ⌨️ 按F键快速飞回当前阶段');
+        console.log('   📐 左下角可切换底图与覆盖图层');
+        console.log('   📖 右侧面板展示故事详情');
+        console.log('   ◀▶ 面板可折叠以扩大地图视野');
+    })();
+</script>
+</body>
+</html>
