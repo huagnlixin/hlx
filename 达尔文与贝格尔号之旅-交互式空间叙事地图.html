@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>达尔文与贝格尔号之旅 · 交互式空间叙事地图</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: rgba(30, 41, 59, 0.92);
+            --border: rgba(100, 140, 180, 0.35);
+            --accent: #60a5fa;
+            --accent-glow: #93c5fd;
+            --text: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --chip-bg: rgba(96, 165, 250, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+            background: #0b1120;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* ===== 侧边面板 ===== */
+        #story-panel {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            width: 380px;
+            max-height: calc(100vh - 180px);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            z-index: 10;
+            padding: 24px 20px 20px;
+            color: var(--text);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(148, 163, 184, 0.06) inset;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+        }
+        #story-panel.collapsed {
+            transform: translateX(430px);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #story-panel::-webkit-scrollbar {
+            width: 3px;
+        }
+        #story-panel::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.25);
+            border-radius: 3px;
+        }
+
+        #story-panel .stage-badge {
+            display: inline-block;
+            font-size: 0.68rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent-glow);
+            background: rgba(96, 165, 250, 0.12);
+            padding: 5px 14px;
+            border-radius: 24px;
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        #story-panel h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0 0 6px;
+            letter-spacing: 0.02em;
+            line-height: 1.35;
+        }
+        #story-panel .subtitle {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+            font-weight: 400;
+            letter-spacing: 0.03em;
+        }
+        #story-panel .story-text {
+            font-size: 0.84rem;
+            line-height: 1.8;
+            color: #cbd5e1;
+            margin-bottom: 16px;
+            font-weight: 300;
+        }
+        .data-chips {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .data-chip {
+            background: var(--chip-bg);
+            border: 1px solid rgba(96, 165, 250, 0.25);
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 0.68rem;
+            color: #b0c8e8;
+            text-align: center;
+            font-weight: 400;
+            letter-spacing: 0.03em;
+            transition: all 0.3s;
+        }
+        .data-chip:hover {
+            border-color: var(--accent);
+            background: rgba(96, 165, 250, 0.18);
+        }
+        .data-chip strong {
+            display: block;
+            font-size: 1.15rem;
+            color: var(--accent-glow);
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        /* ===== 底部导航条 ===== */
+        #stage-nav {
+            position: absolute;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border-radius: 44px;
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            align-items: center;
+        }
+        #stage-nav .nav-dot {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid rgba(148, 163, 184, 0.35);
+            background: transparent;
+            cursor: pointer;
+            color: #64748b;
+            font-weight: 700;
+            font-size: 0.72rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+            font-family: 'Inter', 'PingFang SC', sans-serif;
+        }
+        #stage-nav .nav-dot:hover {
+            border-color: #94a3b8;
+            color: #cbd5e1;
+            box-shadow: 0 0 12px rgba(148, 163, 184, 0.2);
+        }
+        #stage-nav .nav-dot.active {
+            border-color: var(--accent);
+            background: rgba(96, 165, 250, 0.2);
+            color: #ffffff;
+            box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+            transform: scale(1.08);
+        }
+        #stage-nav .nav-dot.done {
+            border-color: rgba(96, 165, 250, 0.5);
+            background: rgba(96, 165, 250, 0.08);
+            color: #93c5fd;
+        }
+        #stage-nav .nav-arrow {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(148, 163, 184, 0.4);
+            background: rgba(30, 41, 59, 0.6);
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            margin: 0 2px;
+        }
+        #stage-nav .nav-arrow:hover {
+            border-color: var(--accent);
+            color: var(--accent-glow);
+            box-shadow: 0 0 14px rgba(96, 165, 250, 0.35);
+        }
+
+        /* ===== 折叠按钮 ===== */
+        #toggle-panel {
+            position: absolute;
+            top: 32px;
+            right: 415px;
+            z-index: 11;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+        }
+        #toggle-panel:hover {
+            border-color: var(--accent);
+            color: var(--accent-glow);
+            box-shadow: 0 0 20px rgba(96, 165, 250, 0.3);
+        }
+        #toggle-panel.shifted {
+            right: 28px;
+        }
+
+        /* ===== 图层控制 ===== */
+        #layer-control {
+            position: absolute;
+            bottom: 130px;
+            left: 20px;
+            z-index: 10;
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            font-size: 0.7rem;
+            color: #b0c0d8;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            letter-spacing: 0.03em;
+        }
+        #layer-control label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 3px 6px;
+            border-radius: 6px;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        #layer-control label:hover {
+            background: rgba(96, 165, 250, 0.08);
+        }
+        #layer-control input[type="radio"],
+        #layer-control input[type="checkbox"] {
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        #layer-control hr {
+            border: none;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+            margin: 2px 0;
+        }
+
+        /* ===== 地图弹窗 ===== */
+        .leaflet-popup-content-wrapper {
+            background: rgba(15, 23, 42, 0.95) !important;
+            border: 1px solid rgba(96, 165, 250, 0.4) !important;
+            border-radius: 12px !important;
+            color: #e2e8f0 !important;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6) !important;
+            backdrop-filter: blur(12px);
+        }
+        .leaflet-popup-tip {
+            background: rgba(15, 23, 42, 0.95) !important;
+        }
+        .leaflet-popup-content {
+            margin: 10px 14px !important;
+            font-size: 0.8rem !important;
+            line-height: 1.6 !important;
+            font-family: 'Inter', 'PingFang SC', sans-serif !important;
+        }
+
+        @media (max-width: 700px) {
+            #story-panel {
+                width: 275px;
+                right: 8px;
+                top: 8px;
+                padding: 16px 14px;
+                border-radius: 12px;
+            }
+            #toggle-panel {
+                right: 298px;
+                top: 14px;
+                width: 30px;
+                height: 30px;
+                font-size: 0.75rem;
+            }
+            #toggle-panel.shifted {
+                right: 12px;
+            }
+            #stage-nav {
+                bottom: 12px;
+                gap: 2px;
+                padding: 5px 10px;
+                border-radius: 32px;
+            }
+            #stage-nav .nav-dot {
+                width: 30px;
+                height: 30px;
+                font-size: 0.65rem;
+            }
+            #stage-nav .nav-arrow {
+                width: 26px;
+                height: 26px;
+                font-size: 0.7rem;
+            }
+            #layer-control {
+                bottom: 105px;
+                left: 8px;
+                font-size: 0.65rem;
+                padding: 10px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- 侧边故事面板 -->
+    <div id="story-panel">
+        <span class="stage-badge" id="stage-badge">开端</span>
+        <h2 id="stage-title">普利茅斯 · 启航</h2>
+        <div class="subtitle" id="stage-subtitle">1831年12月27日 · 英国</div>
+        <div class="story-text" id="stage-text"></div>
+        <div class="data-chips" id="stage-data"></div>
+    </div>
+
+    <!-- 折叠按钮 -->
+    <button id="toggle-panel">◀</button>
+
+    <!-- 底部导航 -->
+    <div id="stage-nav">
+        <button class="nav-arrow" id="btn-prev">◀</button>
+        <button class="nav-dot active" data-stage="0">1</button>
+        <button class="nav-dot" data-stage="1">2</button>
+        <button class="nav-dot" data-stage="2">3</button>
+        <button class="nav-dot" data-stage="3">4</button>
+        <button class="nav-dot" data-stage="4">5</button>
+        <button class="nav-dot" data-stage="5">6</button>
+        <button class="nav-arrow" id="btn-next">▶</button>
+    </div>
+
+    <!-- 图层控制 -->
+    <div id="layer-control">
+        <div style="color:#93c5fd; font-weight:700; margin-bottom:4px; letter-spacing:0.05em; font-size:0.75rem;">🗺️ 图层控制</div>
+        <label><input type="radio" name="basemap" value="modern" checked> 现代底图</label>
+        <label><input type="radio" name="basemap" value="dark"> 深色底图</label>
+        <label><input type="radio" name="basemap" value="satellite"> 卫星影像</label>
+        <hr>
+        <label><input type="checkbox" id="layer-routes" checked> 航行路线</label>
+        <label><input type="checkbox" id="layer-markers" checked> 停靠站点</label>
+        <label><input type="checkbox" id="layer-observations"> 重要观察地</label>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        (function() {
+            const stages = [{
+                id: 0, name: '开端', title: '普利茅斯 · 启航', subtitle: '1831年12月27日 · 英国',
+                text: '年轻的博物学家查尔斯·达尔文登上英国皇家海军贝格尔号（HMS Beagle），从普利茅斯港出发。这艘船的任务是测绘南美洲海岸线，而达尔文则以自费博物学家的身份随行。他在日记中写道："这是我一生中最重要的一天。"此时无人知晓，这次航行将彻底改变人类对生命起源的认知。',
+                data: [['22岁', '达尔文年龄'], ['5年', '计划航程'], ['贝格尔号', '双桅横帆船']],
+                center: [50.37, -4.14], zoom: 12, markerLatLng: [50.37, -4.14], markerLabel: '普利茅斯', pathCoords: null
+            }, {
+                id: 1, name: '发展', title: '佛得角 · 热带初探', subtitle: '1832年1月 · 佛得角群岛',
+                text: '贝格尔号抵达佛得角群岛的普拉亚港。达尔文首次亲眼目睹热带雨林与火山地质，采集了大量植物、昆虫和岩石样本。在圣地亚哥岛的考察中，他观察到不同海拔的植被变化，开始思考地理环境对生物分布的影响。这些早期观察为他日后的理论埋下了种子。',
+                data: [['普拉亚', '停靠地'], ['火山岩', '主要采集'], ['热带', '首次体验']],
+                center: [14.93, -23.51], zoom: 11, markerLatLng: [14.93, -23.51], markerLabel: '佛得角·普拉亚',
+                pathCoords: [[50.37, -4.14], [46.5, -8.0], [38.0, -18.0], [25.0, -22.0], [14.93, -23.51]]
+            }, {
+                id: 2, name: '发展', title: '巴西 · 巴伊亚', subtitle: '1832年2月 · 南美洲',
+                text: '船队横跨大西洋，抵达巴西的巴伊亚（今萨尔瓦多）。达尔文被热带雨林的丰富物种所震撼：色彩斑斓的蝴蝶、巨大的树懒化石、以及从未见过的植物。他在巴西内陆进行了多次徒步考察，收集了数百个物种标本。这片大陆的生物多样性让他惊叹，也让他对"物种不变"的传统观念产生怀疑。',
+                data: [['萨尔瓦多', '停靠地'], ['化石', '巨型树懒'], ['标本', '数百种']],
+                center: [-12.97, -38.50], zoom: 11, markerLatLng: [-12.97, -38.50], markerLabel: '巴西·巴伊亚',
+                pathCoords: [[14.93, -23.51], [5.0, -25.0], [-5.0, -32.0], [-12.97, -38.50]]
+            }, {
+                id: 3, name: '高潮', title: '加拉帕戈斯 · 进化的启示', subtitle: '1835年9月 · 加拉帕戈斯群岛',
+                text: '这是整个航行的转折点。在距离南美大陆1000公里的加拉帕戈斯群岛上，达尔文发现每个小岛上的巨龟和雀鸟都略有不同——它们的喙形状适应了各自的食物来源。当地副总督告诉他，仅凭龟壳就能判断乌龟来自哪个岛。达尔文后来写道："这些事实似乎给我带来了关于物种起源的些许光明。"',
+                data: [['雀鸟', '13种'], ['巨龟', '不同岛种'], ['关键', '自然选择灵感']],
+                center: [-0.83, -89.43], zoom: 15, markerLatLng: [-0.83, -89.43], markerLabel: '加拉帕戈斯群岛',
+                pathCoords: [[-12.97, -38.50], [-25.0, -47.0], [-40.0, -60.0], [-52.0, -74.0], [-38.0, -86.0], [-15.0, -90.0], [-0.83, -89.43]]
+            }, {
+                id: 4, name: '发展', title: '悉尼 · 南方大陆', subtitle: '1836年1月 · 澳大利亚',
+                text: '贝格尔号横渡太平洋，抵达澳大利亚悉尼。达尔文考察了蓝山山脉，对当地的有袋类动物和鸭嘴兽等奇特物种惊奇不已。他注意到澳大利亚的动物与其它大陆迥异，进一步强化了"地理隔离导致物种差异"的想法。此时他的笔记中已经充满了关于物种演变的思索。',
+                data: [['有袋类', '独特物种'], ['地理隔离', '重要观察'], ['168天后', '返回英国']],
+                center: [-33.87, 151.21], zoom: 11, markerLatLng: [-33.87, 151.21], markerLabel: '悉尼',
+                pathCoords: [[-0.83, -89.43], [-15.0, -110.0], [-30.0, -140.0], [-33.87, 151.21]]
+            }, {
+                id: 5, name: '结尾', title: '法尔茅斯 · 归来与巨著', subtitle: '1836年10月2日 · 英国',
+                text: '经过将近五年的环球航行，贝格尔号终于返回英国法尔茅斯港。达尔文带回数千件标本、大量笔记和一颗充满疑问的心。此后他经过二十多年的研究，于1859年发表《物种起源》，提出了改变世界的自然选择进化论。这次航行不仅是地理大发现，更是人类思想史上的一次伟大探险。',
+                data: [['4年9个月', '总航程'], ['数千件', '标本'], ['1859年', '发表《物种起源》']],
+                center: [50.15, -5.07], zoom: 12, markerLatLng: [50.15, -5.07], markerLabel: '法尔茅斯',
+                pathCoords: [[-33.87, 151.21], [-20.0, 100.0], [0.0, 40.0], [30.0, -15.0], [50.15, -5.07]]
+            }];
+
+            const observationPoints = [
+                { coords: [-0.75, -90.31], label: '雀鸟观察' },
+                { coords: [-11.13, -38.55], label: '树懒化石' },
+                { coords: [-33.72, 150.35], label: '蓝山考察' }
+            ];
+
+            const map = L.map('map', { center: [10, -30], zoom: 3, zoomControl: true });
+
+            const baseMaps = {
+                modern: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }),
+                dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CARTO' }),
+                satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' })
+            };
+            baseMaps.modern.addTo(map);
+
+            const routeGroup = L.layerGroup().addTo(map);
+            const markerGroup = L.layerGroup().addTo(map);
+            const observationGroup = L.layerGroup();
+
+            const allCoords = [];
+            stages.forEach(s => { if (s.pathCoords) allCoords.push(...s.pathCoords); });
+            const uniqueCoords = allCoords.filter((c, i) => i === 0 || c[0] !== allCoords[i - 1][0] || c[1] !== allCoords[i - 1][1]);
+            L.polyline(uniqueCoords, { color: '#60a5fa', weight: 3, opacity: 0.6, dashArray: '10, 8' }).addTo(routeGroup);
+
+            const allMarkers = [];
+            stages.forEach((s, idx) => {
+                const isSpecial = (idx === 3);
+                const color = isSpecial ? '#f59e0b' : '#60a5fa';
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div style="width:28px;height:28px;background:${color};border:3px solid #fff;border-radius:50%;box-shadow:0 0 16px ${color}44, 0 0 6px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#0f172a;font-family:sans-serif">${idx === 0 ? '起' : idx === 5 ? '归' : isSpecial ? '★' : idx}</div>`,
+                    iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -15]
+                });
+                const marker = L.marker(s.markerLatLng, { icon }).bindPopup(`<b>${s.markerLabel}</b><br><span style="color:#94a3b8;">${s.subtitle}</span>`);
+                markerGroup.addLayer(marker);
+                allMarkers.push(marker);
+            });
+
+            observationPoints.forEach(p => {
+                L.circleMarker(p.coords, { radius: 6, color: '#f59e0b', fillColor: '#fbbf24', fillOpacity: 0.55, weight: 2 })
+                    .bindTooltip(p.label, { className: 'custom-tooltip' }).addTo(observationGroup);
+            });
+
+            let currentIndex = 0;
+            let highlightPath = null;
+
+            function updateUI(idx) {
+                const s = stages[idx];
+                document.getElementById('stage-badge').textContent = s.name;
+                document.getElementById('stage-title').textContent = s.title;
+                document.getElementById('stage-subtitle').textContent = s.subtitle;
+                document.getElementById('stage-text').textContent = s.text;
+                document.getElementById('stage-data').innerHTML = s.data.map(d =>
+                    `<div class="data-chip"><strong>${d[0]}</strong>${d[1]}</div>`
+                ).join('');
+                document.getElementById('story-panel').scrollTop = 0;
+                document.querySelectorAll('#stage-nav .nav-dot').forEach((dot, i) => {
+                    dot.classList.remove('active', 'done');
+                    if (i === idx) dot.classList.add('active');
+                    else if (i < idx) dot.classList.add('done');
+                });
+            }
+
+            function flyToStage(idx) {
+                const s = stages[idx];
+                map.flyTo(s.center, s.zoom, { duration: 1.8 });
+                if (highlightPath) routeGroup.removeLayer(highlightPath);
+                if (s.pathCoords) {
+                    highlightPath = L.polyline(s.pathCoords, {
+                        color: '#facc15',
+                        weight: 5,
+                        opacity: 0.9
+                    }).addTo(routeGroup);
+                }
+                updateUI(idx);
+                currentIndex = idx;
+                setTimeout(() => { if (allMarkers[idx]) allMarkers[idx].openPopup(); }, 2000);
+            }
+
+            document.querySelectorAll('#stage-nav .nav-dot').forEach(dot => {
+                dot.addEventListener('click', function() {
+                    const idx = parseInt(this.dataset.stage);
+                    if (!isNaN(idx) && idx !== currentIndex) flyToStage(idx);
+                });
+            });
+            document.getElementById('btn-prev').addEventListener('click', () => { if (currentIndex > 0) flyToStage(currentIndex - 1); });
+            document.getElementById('btn-next').addEventListener('click', () => { if (currentIndex < stages.length - 1) flyToStage(currentIndex + 1); });
+
+            const panel = document.getElementById('story-panel');
+            const toggleBtn = document.getElementById('toggle-panel');
+            let collapsed = false;
+            toggleBtn.addEventListener('click', () => {
+                collapsed = !collapsed;
+                if (collapsed) { panel.classList.add('collapsed');
+                    toggleBtn.classList.add('shifted');
+                    toggleBtn.textContent = '▶'; } else { panel.classList.remove('collapsed');
+                    toggleBtn.classList.remove('shifted');
+                    toggleBtn.textContent = '◀'; }
+            });
+
+            document.querySelectorAll('input[name="basemap"]').forEach(r => {
+                r.addEventListener('change', function() {
+                    Object.values(baseMaps).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+                    baseMaps[this.value].addTo(map);
+                });
+            });
+            document.getElementById('layer-routes').addEventListener('change', function() { this.checked ? map.addLayer(
+                    routeGroup) : map.removeLayer(routeGroup); });
+            document.getElementById('layer-markers').addEventListener('change', function() { this.checked ? map.addLayer(
+                    markerGroup) : map.removeLayer(markerGroup); });
+            document.getElementById('layer-observations').addEventListener('change', function() { this.checked ? map.addLayer(
+                    observationGroup) : map.removeLayer(observationGroup); });
+
+            allMarkers.forEach((m, i) => m.on('click', () => { if (i !== currentIndex) flyToStage(i); }));
+            document.addEventListener('keydown', e => {
+                if (e.key === 'ArrowRight' && currentIndex < stages.length - 1) flyToStage(currentIndex + 1);
+                else if (e.key === 'ArrowLeft' && currentIndex > 0) flyToStage(currentIndex - 1);
+            });
+
+            flyToStage(0);
+        })();
+    </script>
+</body>
+</html>
